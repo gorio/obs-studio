@@ -4,14 +4,22 @@
 #include <obs.h>
 #include <util/bmem.h>
 
+#include <QApplication>
+#include <QClipboard>
 #include <QComboBox>
+#include <QDesktopServices>
 #include <QFrame>
 #include <QGridLayout>
 #include <QHBoxLayout>
 #include <QLabel>
+#include <QLineEdit>
+#include <QMessageBox>
 #include <QPushButton>
 #include <QSignalBlocker>
 #include <QStackedWidget>
+#include <QUuid>
+#include <QUrl>
+#include <QUrlQuery>
 #include <QVBoxLayout>
 
 namespace {
@@ -129,12 +137,20 @@ obs_source_t *sceneByName(const QString &name)
 	obs_frontend_source_list_free(&scenes);
 	return result;
 }
+
+QString normalizedBaseUrl(QString value)
+{
+	value = value.trimmed();
+	while (value.endsWith('/'))
+		value.chop(1);
+	return value;
+}
 } // namespace
 
 YondCastDock::YondCastDock(QWidget *parent) : QWidget(parent)
 {
 	setObjectName(QStringLiteral("YondCastDock"));
-	setMinimumWidth(340);
+	setMinimumWidth(380);
 
 	auto *layout = new QVBoxLayout(this);
 	layout->setContentsMargins(12, 12, 12, 12);
@@ -143,14 +159,14 @@ YondCastDock::YondCastDock(QWidget *parent) : QWidget(parent)
 	auto *titleRow = new QHBoxLayout();
 	auto *titleBlock = new QVBoxLayout();
 	auto *title = new QLabel(QStringLiteral("<b style='font-size:20px'>Yond Cast</b>"), this);
-	auto *subtitle = new QLabel(QStringLiteral("Produção ao vivo com o motor nativo do OBS Studio."), this);
+	auto *subtitle = new QLabel(QStringLiteral("Produção Yond Cast com o OBS como motor nativo."), this);
 	subtitle->setWordWrap(true);
 	subtitle->setStyleSheet(QStringLiteral("color:#9aa0aa;"));
 	titleBlock->addWidget(title);
 	titleBlock->addWidget(subtitle);
 	titleRow->addLayout(titleBlock, 1);
 
-	auto *liveBadge = new QLabel(QStringLiteral("NATIVE OBS"), this);
+	auto *liveBadge = new QLabel(QStringLiteral("OBS ENGINE"), this);
 	liveBadge->setAlignment(Qt::AlignCenter);
 	liveBadge->setStyleSheet(QStringLiteral(
 		"QLabel{background:#29233f;color:#bfa8ff;border:1px solid #544681;border-radius:8px;padding:5px 8px;font-weight:700;}"));
@@ -248,12 +264,70 @@ YondCastDock::YondCastDock(QWidget *parent) : QWidget(parent)
 	connect(earnButton, &QPushButton::clicked, this, &YondCastDock::showEarnPage);
 
 	pages = new QStackedWidget(this);
-	pages->addWidget(makeSectionPage(
-		QStringLiteral("Produzir"), QStringLiteral("O Yond Cast passa a comandar cenas e saídas nativas do OBS."),
-		{{QStringLiteral("Convidados"), QStringLiteral("participantes remotos")},
-		 {QStringLiteral("Layouts"), QStringLiteral("composição automática")},
-		 {QStringLiteral("Mídia"), QStringLiteral("vídeos, imagens e áudio")},
-		 {QStringLiteral("Identidade"), QStringLiteral("logos e lower thirds")}}, pages));
+
+	// PRODUZIR: Guest Engine V1 is functional. Other production modules follow on this same native layer.
+	auto *producePage = new QWidget(pages);
+	auto *produceLayout = new QVBoxLayout(producePage);
+	produceLayout->setContentsMargins(0, 0, 0, 0);
+	produceLayout->setSpacing(8);
+	auto *produceTitle = new QLabel(QStringLiteral("<b style='font-size:15px'>Produzir</b>"), producePage);
+	auto *produceDescription = new QLabel(
+		QStringLiteral("Convidados remotos entram por WebRTC e viram fontes independentes do OBS."), producePage);
+	produceDescription->setWordWrap(true);
+	produceDescription->setStyleSheet(QStringLiteral("color:#9aa0aa;"));
+	produceLayout->addWidget(produceTitle);
+	produceLayout->addWidget(produceDescription);
+
+	auto *guestFrame = new QFrame(producePage);
+	guestFrame->setFrameShape(QFrame::StyledPanel);
+	auto *guestLayout = new QGridLayout(guestFrame);
+	guestLayout->setContentsMargins(10, 10, 10, 10);
+	guestLayout->setSpacing(8);
+	auto *guestTitle = new QLabel(QStringLiteral("<b>Convidados · Guest Engine V1</b>"), guestFrame);
+	auto *guestHelp = new QLabel(
+		QStringLiteral("Crie a sala, envie o link e adicione cada convidado como uma fonte WebRTC limpa no Program."), guestFrame);
+	guestHelp->setWordWrap(true);
+	guestHelp->setStyleSheet(QStringLiteral("color:#9aa0aa;"));
+	guestBaseUrlEdit = new QLineEdit(QStringLiteral("https://yondcast.com"), guestFrame);
+	guestSessionEdit = new QLineEdit(QUuid::createUuid().toString(QUuid::WithoutBraces), guestFrame);
+	guestNameEdit = new QLineEdit(guestFrame);
+	guestNameEdit->setPlaceholderText(QStringLiteral("Nome exato usado pelo convidado"));
+	guestOpenButton = new QPushButton(QStringLiteral("Abrir link do convidado"), guestFrame);
+	guestCopyButton = new QPushButton(QStringLiteral("Copiar convite"), guestFrame);
+	guestAddSourceButton = new QPushButton(QStringLiteral("Adicionar convidado ao OBS"), guestFrame);
+	guestStatusLabel = new QLabel(QStringLiteral("Pronto para criar uma fonte de convidado."), guestFrame);
+	guestStatusLabel->setWordWrap(true);
+	guestStatusLabel->setStyleSheet(QStringLiteral("color:#9aa0aa;"));
+
+	guestLayout->addWidget(guestTitle, 0, 0, 1, 2);
+	guestLayout->addWidget(guestHelp, 1, 0, 1, 2);
+	guestLayout->addWidget(new QLabel(QStringLiteral("Servidor Yond Cast"), guestFrame), 2, 0);
+	guestLayout->addWidget(guestBaseUrlEdit, 2, 1);
+	guestLayout->addWidget(new QLabel(QStringLiteral("Sessão"), guestFrame), 3, 0);
+	guestLayout->addWidget(guestSessionEdit, 3, 1);
+	guestLayout->addWidget(new QLabel(QStringLiteral("Convidado"), guestFrame), 4, 0);
+	guestLayout->addWidget(guestNameEdit, 4, 1);
+	guestLayout->addWidget(guestOpenButton, 5, 0);
+	guestLayout->addWidget(guestCopyButton, 5, 1);
+	guestLayout->addWidget(guestAddSourceButton, 6, 0, 1, 2);
+	guestLayout->addWidget(guestStatusLabel, 7, 0, 1, 2);
+	produceLayout->addWidget(guestFrame);
+
+	connect(guestOpenButton, &QPushButton::clicked, this, &YondCastDock::openGuestInvite);
+	connect(guestCopyButton, &QPushButton::clicked, this, &YondCastDock::copyGuestInvite);
+	connect(guestAddSourceButton, &QPushButton::clicked, this, &YondCastDock::addGuestSource);
+
+	auto *futureGrid = new QGridLayout();
+	futureGrid->setHorizontalSpacing(8);
+	futureGrid->setVerticalSpacing(8);
+	futureGrid->addWidget(makeFeatureButton(QStringLiteral("Layouts"), QStringLiteral("composição automática"), producePage), 0, 0);
+	futureGrid->addWidget(makeFeatureButton(QStringLiteral("Legendas"), QStringLiteral("nomes e lower thirds"), producePage), 0, 1);
+	futureGrid->addWidget(makeFeatureButton(QStringLiteral("Comentários"), QStringLiteral("mensagens no Program"), producePage), 1, 0);
+	futureGrid->addWidget(makeFeatureButton(QStringLiteral("ISO"), QStringLiteral("gravação por participante"), producePage), 1, 1);
+	produceLayout->addLayout(futureGrid);
+	produceLayout->addStretch(1);
+	pages->addWidget(producePage);
+
 	pages->addWidget(makeSectionPage(
 		QStringLiteral("Engajar"), QStringLiteral("Recursos de interação do Yond Cast durante a transmissão."),
 		{{QStringLiteral("Chat"), QStringLiteral("YouTube e destinos")},
@@ -364,9 +438,122 @@ void YondCastDock::selectPreviewScene(int index)
 
 void YondCastDock::triggerTransition()
 {
-	if (!obs_frontend_preview_program_mode_active())
+	if (obs_frontend_preview_program_mode_active())
+		obs_frontend_preview_program_trigger_transition();
+}
+
+QString YondCastDock::guestInviteUrl() const
+{
+	const QString base = normalizedBaseUrl(guestBaseUrlEdit ? guestBaseUrlEdit->text() : QString());
+	if (base.isEmpty() || !guestSessionEdit)
+		return {};
+	QUrl url(base + QStringLiteral("/"));
+	QUrlQuery query;
+	query.addQueryItem(QStringLiteral("session"), guestSessionEdit->text().trimmed());
+	query.addQueryItem(QStringLiteral("role"), QStringLiteral("guest"));
+	url.setQuery(query);
+	return url.toString(QUrl::FullyEncoded);
+}
+
+QString YondCastDock::guestBridgeUrl() const
+{
+	const QString base = normalizedBaseUrl(guestBaseUrlEdit ? guestBaseUrlEdit->text() : QString());
+	if (base.isEmpty() || !guestSessionEdit || !guestNameEdit)
+		return {};
+	QUrl url(base + QStringLiteral("/obs-guest.html"));
+	QUrlQuery query;
+	query.addQueryItem(QStringLiteral("session"), guestSessionEdit->text().trimmed());
+	query.addQueryItem(QStringLiteral("guest"), guestNameEdit->text().trimmed());
+	query.addQueryItem(QStringLiteral("fit"), QStringLiteral("cover"));
+	url.setQuery(query);
+	return url.toString(QUrl::FullyEncoded);
+}
+
+void YondCastDock::openGuestInvite()
+{
+	const QString url = guestInviteUrl();
+	if (url.isEmpty())
 		return;
-	obs_frontend_preview_program_trigger_transition();
+	QDesktopServices::openUrl(QUrl(url));
+}
+
+void YondCastDock::copyGuestInvite()
+{
+	const QString url = guestInviteUrl();
+	if (url.isEmpty())
+		return;
+	QApplication::clipboard()->setText(url);
+	if (guestStatusLabel)
+		guestStatusLabel->setText(QStringLiteral("Convite copiado. O convidado deve usar o mesmo nome informado abaixo."));
+}
+
+void YondCastDock::addGuestSource()
+{
+	if (!guestNameEdit || !guestSessionEdit || !guestBaseUrlEdit)
+		return;
+	const QString guestName = guestNameEdit->text().trimmed();
+	const QString sessionId = guestSessionEdit->text().trimmed();
+	const QString bridgeUrl = guestBridgeUrl();
+	if (guestName.isEmpty() || sessionId.isEmpty() || bridgeUrl.isEmpty()) {
+		QMessageBox::warning(this, QStringLiteral("Yond Cast"),
+			QStringLiteral("Informe servidor, sessão e o nome exato do convidado."));
+		return;
+	}
+
+	obs_video_info ovi = {};
+	obs_get_video_info(&ovi);
+	const uint32_t width = ovi.base_width ? ovi.base_width : 1920;
+	const uint32_t height = ovi.base_height ? ovi.base_height : 1080;
+	const QString sourceDisplayName = QStringLiteral("Yond Cast · %1").arg(guestName);
+
+	obs_data_t *settings = obs_data_create();
+	obs_data_set_string(settings, "url", bridgeUrl.toUtf8().constData());
+	obs_data_set_int(settings, "width", width);
+	obs_data_set_int(settings, "height", height);
+	obs_data_set_int(settings, "fps", 30);
+	obs_data_set_bool(settings, "reroute_audio", true);
+	obs_data_set_bool(settings, "shutdown", false);
+	obs_data_set_bool(settings, "restart_when_active", true);
+
+	obs_source_t *source = obs_get_source_by_name(sourceDisplayName.toUtf8().constData());
+	if (source) {
+		obs_source_update(source, settings);
+	} else {
+		source = obs_source_create("browser_source", sourceDisplayName.toUtf8().constData(), settings, nullptr);
+	}
+	obs_data_release(settings);
+
+	if (!source) {
+		QMessageBox::critical(this, QStringLiteral("Yond Cast"),
+			QStringLiteral("Não foi possível criar a fonte Browser. Confirme que o plugin obs-browser está habilitado."));
+		return;
+	}
+
+	obs_source_t *sceneSource = obs_frontend_get_current_scene();
+	obs_scene_t *scene = sceneSource ? obs_scene_from_source(sceneSource) : nullptr;
+	if (!scene) {
+		if (sceneSource)
+			obs_source_release(sceneSource);
+		obs_source_release(source);
+		QMessageBox::warning(this, QStringLiteral("Yond Cast"), QStringLiteral("Nenhuma cena ativa para receber o convidado."));
+		return;
+	}
+
+	const QByteArray sourceNameUtf8 = sourceDisplayName.toUtf8();
+	obs_sceneitem_t *existingItem = obs_scene_find_source(scene, sourceNameUtf8.constData());
+	if (!existingItem)
+		obs_scene_add(scene, source);
+
+	if (sceneSource)
+		obs_source_release(sceneSource);
+	obs_source_release(source);
+
+	if (guestStatusLabel) {
+		guestStatusLabel->setText(QStringLiteral(
+			"Fonte criada: <b>%1</b><br>Ela ficará aguardando o convidado <b>%2</b> entrar na sessão.")
+			.arg(sourceDisplayName.toHtmlEscaped(), guestName.toHtmlEscaped()));
+		guestStatusLabel->setTextFormat(Qt::RichText);
+	}
 }
 
 void YondCastDock::toggleStreaming()
