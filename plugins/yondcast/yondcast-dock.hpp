@@ -2,6 +2,7 @@
 
 #include <QWidget>
 
+class QComboBox;
 class QLabel;
 class QPushButton;
 class QStackedWidget;
@@ -21,12 +22,16 @@ private slots:
 	void toggleStreaming();
 	void toggleRecording();
 	void toggleStudioMode();
+	void selectProgramScene(int index);
+	void selectPreviewScene(int index);
+	void triggerTransition();
 	void showProducePage();
 	void showEngagePage();
 	void showEarnPage();
 
 private:
 	void updateQuickActions();
+	void updateSceneControls();
 	void setPage(int index);
 
 	QLabel *engineStatusLabel = nullptr;
@@ -37,6 +42,9 @@ private:
 	QLabel *sceneLabel = nullptr;
 	QLabel *studioModeLabel = nullptr;
 
+	QComboBox *programSceneCombo = nullptr;
+	QComboBox *previewSceneCombo = nullptr;
+	QPushButton *transitionButton = nullptr;
 	QPushButton *streamButton = nullptr;
 	QPushButton *recordButton = nullptr;
 	QPushButton *studioModeButton = nullptr;
