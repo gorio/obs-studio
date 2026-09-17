@@ -40,36 +40,13 @@ QLabel *makeMetaLabel(const QString &title, QWidget *parent)
 	return label;
 }
 
-QPushButton *makeFeatureButton(const QString &title, const QString &subtitle, QWidget *parent)
+QPushButton *makeFeatureButton(const QString &title, const QString &subtitle, QWidget *parent, bool enabled = false)
 {
 	auto *button = new QPushButton(parent);
 	button->setText(QStringLiteral("%1\n%2").arg(title, subtitle));
-	button->setMinimumHeight(54);
-	button->setEnabled(false);
+	button->setMinimumHeight(58);
+	button->setEnabled(enabled);
 	return button;
-}
-
-QWidget *makeSectionPage(const QString &heading, const QString &description,
-			 const QList<QPair<QString, QString>> &features, QWidget *parent)
-{
-	auto *page = new QWidget(parent);
-	auto *layout = new QVBoxLayout(page);
-	layout->setContentsMargins(0, 0, 0, 0);
-	layout->setSpacing(8);
-	auto *title = new QLabel(QStringLiteral("<b style='font-size:15px'>%1</b>").arg(heading), page);
-	auto *subtitle = new QLabel(description, page);
-	subtitle->setWordWrap(true);
-	subtitle->setStyleSheet(QStringLiteral("color:#9aa0aa;"));
-	layout->addWidget(title);
-	layout->addWidget(subtitle);
-	auto *grid = new QGridLayout();
-	grid->setHorizontalSpacing(8);
-	grid->setVerticalSpacing(8);
-	for (int i = 0; i < features.size(); ++i)
-		grid->addWidget(makeFeatureButton(features[i].first, features[i].second, page), i / 2, i % 2);
-	layout->addLayout(grid);
-	layout->addStretch(1);
-	return page;
 }
 
 QString sourceName(obs_source_t *source)
@@ -150,152 +127,140 @@ YondCastDock::YondCastDock(QWidget *parent) : QWidget(parent)
 	setMinimumWidth(390);
 
 	auto *layout = new QVBoxLayout(this);
-	layout->setContentsMargins(12, 12, 12, 12);
-	layout->setSpacing(10);
+	layout->setContentsMargins(14, 14, 14, 14);
+	layout->setSpacing(12);
 
+	// Header: Yond Cast is the product. OBS stays in the background as the engine.
 	auto *titleRow = new QHBoxLayout();
 	auto *titleBlock = new QVBoxLayout();
-	auto *title = new QLabel(QStringLiteral("<b style='font-size:20px'>Yond Cast</b>"), this);
-	auto *subtitle = new QLabel(QStringLiteral("Produção Yond Cast com o OBS como motor nativo."), this);
+	auto *title = new QLabel(QStringLiteral("<b style='font-size:22px'>Yond Cast</b>"), this);
+	auto *subtitle = new QLabel(QStringLiteral("Convidados, layouts, legendas, comentários e gravação individual."), this);
 	subtitle->setWordWrap(true);
 	subtitle->setStyleSheet(QStringLiteral("color:#9aa0aa;"));
 	titleBlock->addWidget(title);
 	titleBlock->addWidget(subtitle);
 	titleRow->addLayout(titleBlock, 1);
-	auto *liveBadge = new QLabel(QStringLiteral("OBS ENGINE"), this);
-	liveBadge->setAlignment(Qt::AlignCenter);
-	liveBadge->setStyleSheet(QStringLiteral("QLabel{background:#29233f;color:#bfa8ff;border:1px solid #544681;border-radius:8px;padding:5px 8px;font-weight:700;}"));
-	titleRow->addWidget(liveBadge, 0, Qt::AlignTop);
+	auto *readyBadge = new QLabel(QStringLiteral("PRONTO"), this);
+	readyBadge->setAlignment(Qt::AlignCenter);
+	readyBadge->setStyleSheet(QStringLiteral("QLabel{background:#173b2b;color:#65df99;border:1px solid #2f7650;border-radius:8px;padding:5px 9px;font-weight:700;}"));
+	titleRow->addWidget(readyBadge, 0, Qt::AlignTop);
 	layout->addLayout(titleRow);
 
-	auto *separator = new QFrame(this);
-	separator->setFrameShape(QFrame::HLine);
-	layout->addWidget(separator);
+	// Compact output status. We intentionally hide OBS implementation details from the main workflow.
+	auto *outputFrame = new QFrame(this);
+	outputFrame->setFrameShape(QFrame::StyledPanel);
+	auto *outputLayout = new QHBoxLayout(outputFrame);
+	outputLayout->setContentsMargins(10, 8, 10, 8);
+	streamingStatusLabel = makeStatusRow(QStringLiteral("Ao vivo"), outputFrame);
+	recordingStatusLabel = makeStatusRow(QStringLiteral("Master"), outputFrame);
+	outputLayout->addWidget(streamingStatusLabel, 1);
+	outputLayout->addWidget(recordingStatusLabel, 1);
+	layout->addWidget(outputFrame);
 
-	engineStatusLabel = makeStatusRow(QStringLiteral("Motor OBS"), this);
-	streamingStatusLabel = makeStatusRow(QStringLiteral("Transmissão"), this);
-	recordingStatusLabel = makeStatusRow(QStringLiteral("Gravação"), this);
-	studioModeLabel = makeStatusRow(QStringLiteral("Modo estúdio"), this);
-	auto *statusGrid = new QGridLayout();
-	statusGrid->addWidget(engineStatusLabel, 0, 0);
-	statusGrid->addWidget(streamingStatusLabel, 0, 1);
-	statusGrid->addWidget(recordingStatusLabel, 1, 0);
-	statusGrid->addWidget(studioModeLabel, 1, 1);
-	layout->addLayout(statusGrid);
+	// Core production modules. Guest Engine is active; next modules are intentionally visible as the roadmap.
+	auto *modulesTitle = new QLabel(QStringLiteral("<b style='font-size:15px'>Produção</b>"), this);
+	layout->addWidget(modulesTitle);
+	auto *moduleGrid = new QGridLayout();
+	moduleGrid->setHorizontalSpacing(8);
+	moduleGrid->setVerticalSpacing(8);
+	auto *guestsModule = makeFeatureButton(QStringLiteral("Convidados"), QStringLiteral("WebRTC remoto"), this, true);
+	auto *layoutsModule = makeFeatureButton(QStringLiteral("Layouts"), QStringLiteral("composição automática"), this);
+	auto *captionsModule = makeFeatureButton(QStringLiteral("Legendas"), QStringLiteral("nome e lower third"), this);
+	auto *commentsModule = makeFeatureButton(QStringLiteral("Comentários"), QStringLiteral("mensagens no ar"), this);
+	auto *isoModule = makeFeatureButton(QStringLiteral("ISO"), QStringLiteral("gravação individual"), this);
+	moduleGrid->addWidget(guestsModule, 0, 0);
+	moduleGrid->addWidget(layoutsModule, 0, 1);
+	moduleGrid->addWidget(captionsModule, 1, 0);
+	moduleGrid->addWidget(commentsModule, 1, 1);
+	moduleGrid->addWidget(isoModule, 2, 0, 1, 2);
+	layout->addLayout(moduleGrid);
 
-	auto *contextFrame = new QFrame(this);
-	contextFrame->setFrameShape(QFrame::StyledPanel);
-	auto *contextLayout = new QGridLayout(contextFrame);
-	profileLabel = makeMetaLabel(QStringLiteral("Perfil"), contextFrame);
-	collectionLabel = makeMetaLabel(QStringLiteral("Coleção de cenas"), contextFrame);
-	sceneLabel = makeMetaLabel(QStringLiteral("Cena atual"), contextFrame);
-	contextLayout->addWidget(profileLabel, 0, 0);
-	contextLayout->addWidget(collectionLabel, 0, 1);
-	contextLayout->addWidget(sceneLabel, 1, 0, 1, 2);
-	layout->addWidget(contextFrame);
-
-	auto *directorFrame = new QFrame(this);
-	directorFrame->setFrameShape(QFrame::StyledPanel);
-	auto *directorLayout = new QGridLayout(directorFrame);
-	auto *directorTitle = new QLabel(QStringLiteral("<b>Direção de cenas</b>"), directorFrame);
-	programSceneCombo = new QComboBox(directorFrame);
-	previewSceneCombo = new QComboBox(directorFrame);
-	transitionButton = new QPushButton(QStringLiteral("Levar preview ao ar"), directorFrame);
-	directorLayout->addWidget(directorTitle, 0, 0, 1, 2);
-	directorLayout->addWidget(new QLabel(QStringLiteral("Programa"), directorFrame), 1, 0);
-	directorLayout->addWidget(programSceneCombo, 1, 1);
-	directorLayout->addWidget(new QLabel(QStringLiteral("Preview"), directorFrame), 2, 0);
-	directorLayout->addWidget(previewSceneCombo, 2, 1);
-	directorLayout->addWidget(transitionButton, 3, 0, 1, 2);
-	layout->addWidget(directorFrame);
-	connect(programSceneCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &YondCastDock::selectProgramScene);
-	connect(previewSceneCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &YondCastDock::selectPreviewScene);
-	connect(transitionButton, &QPushButton::clicked, this, &YondCastDock::triggerTransition);
-
-	auto *quickGrid = new QGridLayout();
-	streamButton = new QPushButton(this);
-	recordButton = new QPushButton(this);
-	studioModeButton = new QPushButton(this);
-	refreshButton = new QPushButton(QStringLiteral("Atualizar"), this);
-	quickGrid->addWidget(streamButton, 0, 0);
-	quickGrid->addWidget(recordButton, 0, 1);
-	quickGrid->addWidget(studioModeButton, 1, 0);
-	quickGrid->addWidget(refreshButton, 1, 1);
-	layout->addLayout(quickGrid);
-	connect(streamButton, &QPushButton::clicked, this, &YondCastDock::toggleStreaming);
-	connect(recordButton, &QPushButton::clicked, this, &YondCastDock::toggleRecording);
-	connect(studioModeButton, &QPushButton::clicked, this, &YondCastDock::toggleStudioMode);
-	connect(refreshButton, &QPushButton::clicked, this, &YondCastDock::refreshStatus);
-
-	auto *nav = new QHBoxLayout();
-	produceButton = new QPushButton(QStringLiteral("Produzir"), this);
-	engageButton = new QPushButton(QStringLiteral("Engajar"), this);
-	earnButton = new QPushButton(QStringLiteral("Ganhar"), this);
-	for (auto *button : {produceButton, engageButton, earnButton}) button->setCheckable(true);
-	nav->addWidget(produceButton); nav->addWidget(engageButton); nav->addWidget(earnButton);
-	layout->addLayout(nav);
-	connect(produceButton, &QPushButton::clicked, this, &YondCastDock::showProducePage);
-	connect(engageButton, &QPushButton::clicked, this, &YondCastDock::showEngagePage);
-	connect(earnButton, &QPushButton::clicked, this, &YondCastDock::showEarnPage);
-
-	pages = new QStackedWidget(this);
-	auto *producePage = new QWidget(pages);
-	auto *produceLayout = new QVBoxLayout(producePage);
-	produceLayout->setContentsMargins(0,0,0,0);
-	auto *produceTitle = new QLabel(QStringLiteral("<b style='font-size:15px'>Produzir</b>"), producePage);
-	auto *produceDescription = new QLabel(QStringLiteral("Convidados remotos entram por WebRTC e viram fontes independentes do OBS."), producePage);
-	produceDescription->setWordWrap(true);
-	produceDescription->setStyleSheet(QStringLiteral("color:#9aa0aa;"));
-	produceLayout->addWidget(produceTitle);
-	produceLayout->addWidget(produceDescription);
-
-	auto *guestFrame = new QFrame(producePage);
+	// Guest Engine V1: this is now the primary dock workflow.
+	auto *guestFrame = new QFrame(this);
 	guestFrame->setFrameShape(QFrame::StyledPanel);
 	auto *guestLayout = new QGridLayout(guestFrame);
-	auto *guestTitle = new QLabel(QStringLiteral("<b>Convidados · Guest Engine V1</b>"), guestFrame);
-	auto *guestHelp = new QLabel(QStringLiteral("Envie o link para o convidado e adicione o participante como Browser Source WebRTC independente."), guestFrame);
+	guestLayout->setContentsMargins(12, 12, 12, 12);
+	guestLayout->setHorizontalSpacing(8);
+	guestLayout->setVerticalSpacing(8);
+	auto *guestTitle = new QLabel(QStringLiteral("<b style='font-size:15px'>Convidados</b>"), guestFrame);
+	auto *guestHelp = new QLabel(QStringLiteral("Compartilhe o convite. Depois adicione o participante ao Program como uma fonte independente."), guestFrame);
 	guestHelp->setWordWrap(true);
 	guestHelp->setStyleSheet(QStringLiteral("color:#9aa0aa;"));
 	guestBaseUrlEdit = new QLineEdit(QStringLiteral("https://yondcast.com"), guestFrame);
+	guestBaseUrlEdit->setVisible(false);
 	guestSessionEdit = new QLineEdit(QUuid::createUuid().toString(QUuid::WithoutBraces), guestFrame);
+	guestSessionEdit->setReadOnly(true);
 	guestNameEdit = new QLineEdit(guestFrame);
-	guestNameEdit->setPlaceholderText(QStringLiteral("Nome exato usado pelo convidado"));
+	guestNameEdit->setPlaceholderText(QStringLiteral("Nome usado pelo convidado"));
 	guestOpenButton = new QPushButton(QStringLiteral("Abrir convite"), guestFrame);
-	guestCopyButton = new QPushButton(QStringLiteral("Copiar convite"), guestFrame);
-	guestAddSourceButton = new QPushButton(QStringLiteral("Adicionar convidado ao OBS"), guestFrame);
-	guestStatusLabel = new QLabel(QStringLiteral("Pronto para testar um convidado."), guestFrame);
+	guestCopyButton = new QPushButton(QStringLiteral("Copiar link"), guestFrame);
+	guestAddSourceButton = new QPushButton(QStringLiteral("Adicionar ao Program"), guestFrame);
+	guestAddSourceButton->setMinimumHeight(38);
+	guestStatusLabel = new QLabel(QStringLiteral("Aguardando convidado."), guestFrame);
 	guestStatusLabel->setWordWrap(true);
 	guestStatusLabel->setTextFormat(Qt::RichText);
-	guestLayout->addWidget(guestTitle,0,0,1,2);
-	guestLayout->addWidget(guestHelp,1,0,1,2);
-	guestLayout->addWidget(new QLabel(QStringLiteral("Servidor"),guestFrame),2,0);
-	guestLayout->addWidget(guestBaseUrlEdit,2,1);
-	guestLayout->addWidget(new QLabel(QStringLiteral("Sessão"),guestFrame),3,0);
-	guestLayout->addWidget(guestSessionEdit,3,1);
-	guestLayout->addWidget(new QLabel(QStringLiteral("Nome do convidado"),guestFrame),4,0);
-	guestLayout->addWidget(guestNameEdit,4,1);
-	guestLayout->addWidget(guestOpenButton,5,0);
-	guestLayout->addWidget(guestCopyButton,5,1);
-	guestLayout->addWidget(guestAddSourceButton,6,0,1,2);
-	guestLayout->addWidget(guestStatusLabel,7,0,1,2);
-	produceLayout->addWidget(guestFrame);
+	guestStatusLabel->setStyleSheet(QStringLiteral("color:#9aa0aa;"));
+
+	guestLayout->addWidget(guestTitle, 0, 0, 1, 2);
+	guestLayout->addWidget(guestHelp, 1, 0, 1, 2);
+	guestLayout->addWidget(new QLabel(QStringLiteral("Sessão"), guestFrame), 2, 0);
+	guestLayout->addWidget(guestSessionEdit, 2, 1);
+	guestLayout->addWidget(new QLabel(QStringLiteral("Convidado"), guestFrame), 3, 0);
+	guestLayout->addWidget(guestNameEdit, 3, 1);
+	guestLayout->addWidget(guestOpenButton, 4, 0);
+	guestLayout->addWidget(guestCopyButton, 4, 1);
+	guestLayout->addWidget(guestAddSourceButton, 5, 0, 1, 2);
+	guestLayout->addWidget(guestStatusLabel, 6, 0, 1, 2);
+	layout->addWidget(guestFrame);
+
 	connect(guestOpenButton, &QPushButton::clicked, this, &YondCastDock::openGuestInvite);
 	connect(guestCopyButton, &QPushButton::clicked, this, &YondCastDock::copyGuestInvite);
 	connect(guestAddSourceButton, &QPushButton::clicked, this, &YondCastDock::addGuestSource);
 
-	auto *futureGrid = new QGridLayout();
-	futureGrid->addWidget(makeFeatureButton(QStringLiteral("Layouts"), QStringLiteral("composição automática"), producePage),0,0);
-	futureGrid->addWidget(makeFeatureButton(QStringLiteral("Legendas"), QStringLiteral("lower thirds"), producePage),0,1);
-	futureGrid->addWidget(makeFeatureButton(QStringLiteral("Comentários"), QStringLiteral("mensagens no Program"), producePage),1,0);
-	futureGrid->addWidget(makeFeatureButton(QStringLiteral("ISO"), QStringLiteral("gravação por participante"), producePage),1,1);
-	produceLayout->addLayout(futureGrid);
-	produceLayout->addStretch(1);
-	pages->addWidget(producePage);
-	pages->addWidget(makeSectionPage(QStringLiteral("Engajar"),QStringLiteral("Recursos de interação do Yond Cast durante a transmissão."),{{QStringLiteral("Chat"),QStringLiteral("YouTube e destinos")},{QStringLiteral("Enquetes"),QStringLiteral("tempo real")},{QStringLiteral("Quiz"),QStringLiteral("perguntas e respostas")},{QStringLiteral("Nuvem"),QStringLiteral("palavras do público")}},pages));
-	pages->addWidget(makeSectionPage(QStringLiteral("Ganhar"),QStringLiteral("Monetização e comunidade."),{{QStringLiteral("Apoios"),QStringLiteral("PIX")},{QStringLiteral("Meta"),QStringLiteral("objetivos")},{QStringLiteral("Ranking"),QStringLiteral("comunidade")},{QStringLiteral("TTS"),QStringLiteral("mensagens por voz")}},pages));
-	layout->addWidget(pages,1);
+	// Minimal transport controls at the bottom. OBS-specific scene/profile controls are deliberately hidden.
+	auto *actions = new QHBoxLayout();
+	streamButton = new QPushButton(this);
+	recordButton = new QPushButton(this);
+	streamButton->setMinimumHeight(38);
+	recordButton->setMinimumHeight(38);
+	actions->addWidget(streamButton, 1);
+	actions->addWidget(recordButton, 1);
+	layout->addLayout(actions);
+	connect(streamButton, &QPushButton::clicked, this, &YondCastDock::toggleStreaming);
+	connect(recordButton, &QPushButton::clicked, this, &YondCastDock::toggleRecording);
+	layout->addStretch(1);
 
-	setPage(0);
+	// Compatibility objects kept off-screen while older event wiring still calls refreshStatus/updateSceneControls.
+	engineStatusLabel = makeStatusRow(QStringLiteral("Motor OBS"), this);
+	studioModeLabel = makeStatusRow(QStringLiteral("Modo estúdio"), this);
+	profileLabel = makeMetaLabel(QStringLiteral("Perfil"), this);
+	collectionLabel = makeMetaLabel(QStringLiteral("Coleção"), this);
+	sceneLabel = makeMetaLabel(QStringLiteral("Cena"), this);
+	programSceneCombo = new QComboBox(this);
+	previewSceneCombo = new QComboBox(this);
+	transitionButton = new QPushButton(this);
+	studioModeButton = new QPushButton(this);
+	refreshButton = new QPushButton(this);
+	produceButton = new QPushButton(this);
+	engageButton = new QPushButton(this);
+	earnButton = new QPushButton(this);
+	pages = new QStackedWidget(this);
+	for (auto *w : {static_cast<QWidget *>(engineStatusLabel), static_cast<QWidget *>(studioModeLabel), static_cast<QWidget *>(profileLabel),
+			 static_cast<QWidget *>(collectionLabel), static_cast<QWidget *>(sceneLabel), static_cast<QWidget *>(programSceneCombo),
+			 static_cast<QWidget *>(previewSceneCombo), static_cast<QWidget *>(transitionButton), static_cast<QWidget *>(studioModeButton),
+			 static_cast<QWidget *>(refreshButton), static_cast<QWidget *>(produceButton), static_cast<QWidget *>(engageButton),
+			 static_cast<QWidget *>(earnButton), static_cast<QWidget *>(pages)})
+		w->hide();
+
+	connect(programSceneCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &YondCastDock::selectProgramScene);
+	connect(previewSceneCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &YondCastDock::selectPreviewScene);
+	connect(transitionButton, &QPushButton::clicked, this, &YondCastDock::triggerTransition);
+	connect(studioModeButton, &QPushButton::clicked, this, &YondCastDock::toggleStudioMode);
+	connect(refreshButton, &QPushButton::clicked, this, &YondCastDock::refreshStatus);
+	connect(produceButton, &QPushButton::clicked, this, &YondCastDock::showProducePage);
+	connect(engageButton, &QPushButton::clicked, this, &YondCastDock::showEngagePage);
+	connect(earnButton, &QPushButton::clicked, this, &YondCastDock::showEarnPage);
+
 	refreshStatus();
 }
 
@@ -325,20 +290,26 @@ void YondCastDock::openGuestInvite() { QDesktopServices::openUrl(QUrl(guestInvit
 void YondCastDock::copyGuestInvite()
 {
 	QApplication::clipboard()->setText(guestInviteUrl());
-	if (guestStatusLabel) guestStatusLabel->setText(QStringLiteral("<span style='color:#54d48a'>Convite copiado.</span> Abra em outro navegador ou dispositivo."));
+	if (guestStatusLabel)
+		guestStatusLabel->setText(QStringLiteral("<span style='color:#54d48a'>Link copiado.</span> Envie para o convidado."));
 }
 
 void YondCastDock::addGuestSource()
 {
 	const QString guest = guestNameEdit ? guestNameEdit->text().trimmed() : QString();
 	if (guest.isEmpty()) {
-		if (guestStatusLabel) guestStatusLabel->setText(QStringLiteral("<span style='color:#e56b6b'>Informe o mesmo nome usado pelo convidado.</span>"));
+		if (guestStatusLabel)
+			guestStatusLabel->setText(QStringLiteral("<span style='color:#e56b6b'>Informe o mesmo nome usado pelo convidado.</span>"));
 		return;
 	}
 	obs_source_t *current = obs_frontend_get_current_scene();
-	if (!current) return;
+	if (!current)
+		return;
 	obs_scene_t *scene = obs_scene_from_source(current);
-	if (!scene) { obs_source_release(current); return; }
+	if (!scene) {
+		obs_source_release(current);
+		return;
+	}
 
 	const QString sourceLabel = QStringLiteral("Yond Cast · %1").arg(guest);
 	const QByteArray sourceLabelUtf8 = sourceLabel.toUtf8();
@@ -356,88 +327,148 @@ void YondCastDock::addGuestSource()
 	if (source) {
 		obs_source_update(source, settings);
 		obs_sceneitem_t *item = obs_scene_find_source(scene, sourceLabelUtf8.constData());
-		if (item) obs_sceneitem_set_visible(item, true);
+		if (item)
+			obs_sceneitem_set_visible(item, true);
 	} else {
 		source = obs_source_create("browser_source", sourceLabelUtf8.constData(), settings, nullptr);
-		if (source) obs_scene_add(scene, source);
+		if (source)
+			obs_scene_add(scene, source);
 	}
 	obs_data_release(settings);
-	if (source) obs_source_release(source);
+	if (source)
+		obs_source_release(source);
 	obs_source_release(current);
-	if (guestStatusLabel) guestStatusLabel->setText(QStringLiteral("<span style='color:#54d48a'>Fonte criada:</span> %1").arg(sourceLabel.toHtmlEscaped()));
+	if (guestStatusLabel)
+		guestStatusLabel->setText(QStringLiteral("<span style='color:#54d48a'>No Program:</span> %1").arg(sourceLabel.toHtmlEscaped()));
 }
 
 void YondCastDock::setStreamingActive(bool active)
 {
-	streamingStatusLabel->setText(active ? QStringLiteral("<b>Transmissão</b><br><span style='color:#54d48a'>AO VIVO</span>") : QStringLiteral("<b>Transmissão</b><br><span style='color:#9aa0aa'>Parada</span>"));
+	if (streamingStatusLabel)
+		streamingStatusLabel->setText(active ? QStringLiteral("<b>Ao vivo</b><br><span style='color:#54d48a'>Transmitindo</span>")
+							 : QStringLiteral("<b>Ao vivo</b><br><span style='color:#9aa0aa'>Parado</span>"));
 	updateQuickActions();
 }
 
 void YondCastDock::setRecordingActive(bool active)
 {
-	recordingStatusLabel->setText(active ? QStringLiteral("<b>Gravação</b><br><span style='color:#54d48a'>Gravando</span>") : QStringLiteral("<b>Gravação</b><br><span style='color:#9aa0aa'>Parada</span>"));
+	if (recordingStatusLabel)
+		recordingStatusLabel->setText(active ? QStringLiteral("<b>Master</b><br><span style='color:#54d48a'>Gravando</span>")
+							 : QStringLiteral("<b>Master</b><br><span style='color:#9aa0aa'>Parado</span>"));
 	updateQuickActions();
 }
 
 void YondCastDock::refreshStatus()
 {
-	engineStatusLabel->setText(QStringLiteral("<b>Motor OBS</b><br><span style='color:#54d48a'>Pronto</span>"));
+	if (engineStatusLabel)
+		engineStatusLabel->setText(QStringLiteral("<b>Motor OBS</b><br><span style='color:#54d48a'>Pronto</span>"));
 	setStreamingActive(obs_frontend_streaming_active());
 	setRecordingActive(obs_frontend_recording_active());
 	const bool studioMode = obs_frontend_preview_program_mode_active();
-	studioModeLabel->setText(studioMode ? QStringLiteral("<b>Modo estúdio</b><br><span style='color:#54d48a'>Ativo</span>") : QStringLiteral("<b>Modo estúdio</b><br><span style='color:#9aa0aa'>Desativado</span>"));
-	profileLabel->setText(QStringLiteral("<span style='color:#9aa0aa'>Perfil</span><br><b>%1</b>").arg(currentProfileName().toHtmlEscaped()));
-	collectionLabel->setText(QStringLiteral("<span style='color:#9aa0aa'>Coleção de cenas</span><br><b>%1</b>").arg(currentCollectionName().toHtmlEscaped()));
-	sceneLabel->setText(QStringLiteral("<span style='color:#9aa0aa'>Cena atual</span><br><b>%1</b>").arg(currentSceneName().toHtmlEscaped()));
+	if (studioModeLabel)
+		studioModeLabel->setText(studioMode ? QStringLiteral("<b>Modo estúdio</b><br><span style='color:#54d48a'>Ativo</span>")
+							 : QStringLiteral("<b>Modo estúdio</b><br><span style='color:#9aa0aa'>Desativado</span>"));
+	if (profileLabel)
+		profileLabel->setText(QStringLiteral("<span style='color:#9aa0aa'>Perfil</span><br><b>%1</b>").arg(currentProfileName().toHtmlEscaped()));
+	if (collectionLabel)
+		collectionLabel->setText(QStringLiteral("<span style='color:#9aa0aa'>Coleção</span><br><b>%1</b>").arg(currentCollectionName().toHtmlEscaped()));
+	if (sceneLabel)
+		sceneLabel->setText(QStringLiteral("<span style='color:#9aa0aa'>Cena</span><br><b>%1</b>").arg(currentSceneName().toHtmlEscaped()));
 	updateQuickActions();
 	updateSceneControls();
 }
 
 void YondCastDock::updateSceneControls()
 {
+	if (!programSceneCombo || !previewSceneCombo || !transitionButton)
+		return;
 	QSignalBlocker a(programSceneCombo), b(previewSceneCombo);
-	programSceneCombo->clear(); previewSceneCombo->clear();
+	programSceneCombo->clear();
+	previewSceneCombo->clear();
 	char **names = obs_frontend_get_scene_names();
 	if (names) {
-		for (size_t i=0; names[i]; ++i) { const QString n=QString::fromUtf8(names[i]); programSceneCombo->addItem(n); previewSceneCombo->addItem(n); }
+		for (size_t i = 0; names[i]; ++i) {
+			const QString n = QString::fromUtf8(names[i]);
+			programSceneCombo->addItem(n);
+			previewSceneCombo->addItem(n);
+		}
 		bfree(names);
 	}
 	programSceneCombo->setCurrentText(currentSceneName());
 	previewSceneCombo->setCurrentText(currentPreviewSceneName());
 	const bool studioMode = obs_frontend_preview_program_mode_active();
 	previewSceneCombo->setEnabled(studioMode);
-	transitionButton->setEnabled(studioMode && previewSceneCombo->count()>0);
+	transitionButton->setEnabled(studioMode && previewSceneCombo->count() > 0);
 }
 
 void YondCastDock::selectProgramScene(int index)
 {
-	if (index<0) return;
-	obs_source_t *scene=sceneByName(programSceneCombo->itemText(index));
-	if (scene) { obs_frontend_set_current_scene(scene); obs_source_release(scene); }
+	if (index < 0 || !programSceneCombo)
+		return;
+	obs_source_t *scene = sceneByName(programSceneCombo->itemText(index));
+	if (scene) {
+		obs_frontend_set_current_scene(scene);
+		obs_source_release(scene);
+	}
 }
 
 void YondCastDock::selectPreviewScene(int index)
 {
-	if (index<0 || !obs_frontend_preview_program_mode_active()) return;
-	obs_source_t *scene=sceneByName(previewSceneCombo->itemText(index));
-	if (scene) { obs_frontend_set_current_preview_scene(scene); obs_source_release(scene); }
+	if (index < 0 || !previewSceneCombo || !obs_frontend_preview_program_mode_active())
+		return;
+	obs_source_t *scene = sceneByName(previewSceneCombo->itemText(index));
+	if (scene) {
+		obs_frontend_set_current_preview_scene(scene);
+		obs_source_release(scene);
+	}
 }
 
-void YondCastDock::triggerTransition() { if (obs_frontend_preview_program_mode_active()) obs_frontend_preview_program_trigger_transition(); }
-void YondCastDock::toggleStreaming() { obs_frontend_streaming_active() ? obs_frontend_streaming_stop() : obs_frontend_streaming_start(); updateQuickActions(); }
-void YondCastDock::toggleRecording() { obs_frontend_recording_active() ? obs_frontend_recording_stop() : obs_frontend_recording_start(); updateQuickActions(); }
-void YondCastDock::toggleStudioMode() { obs_frontend_set_preview_program_mode(!obs_frontend_preview_program_mode_active()); refreshStatus(); }
+void YondCastDock::triggerTransition()
+{
+	if (obs_frontend_preview_program_mode_active())
+		obs_frontend_preview_program_trigger_transition();
+}
+
+void YondCastDock::toggleStreaming()
+{
+	obs_frontend_streaming_active() ? obs_frontend_streaming_stop() : obs_frontend_streaming_start();
+	updateQuickActions();
+}
+
+void YondCastDock::toggleRecording()
+{
+	obs_frontend_recording_active() ? obs_frontend_recording_stop() : obs_frontend_recording_start();
+	updateQuickActions();
+}
+
+void YondCastDock::toggleStudioMode()
+{
+	obs_frontend_set_preview_program_mode(!obs_frontend_preview_program_mode_active());
+	refreshStatus();
+}
 
 void YondCastDock::updateQuickActions()
 {
-	streamButton->setText(obs_frontend_streaming_active()?QStringLiteral("Encerrar transmissão"):QStringLiteral("Iniciar transmissão"));
-	recordButton->setText(obs_frontend_recording_active()?QStringLiteral("Parar gravação"):QStringLiteral("Iniciar gravação"));
-	studioModeButton->setText(obs_frontend_preview_program_mode_active()?QStringLiteral("Desativar estúdio"):QStringLiteral("Ativar modo estúdio"));
+	if (streamButton)
+		streamButton->setText(obs_frontend_streaming_active() ? QStringLiteral("Encerrar transmissão") : QStringLiteral("Transmitir"));
+	if (recordButton)
+		recordButton->setText(obs_frontend_recording_active() ? QStringLiteral("Parar master") : QStringLiteral("Gravar master"));
+	if (studioModeButton)
+		studioModeButton->setText(obs_frontend_preview_program_mode_active() ? QStringLiteral("Desativar estúdio") : QStringLiteral("Ativar modo estúdio"));
 }
 
 void YondCastDock::setPage(int index)
 {
-	pages->setCurrentIndex(index);
-	produceButton->setChecked(index==0); engageButton->setChecked(index==1); earnButton->setChecked(index==2);
+	if (pages && pages->count() > index)
+		pages->setCurrentIndex(index);
+	if (produceButton)
+		produceButton->setChecked(index == 0);
+	if (engageButton)
+		engageButton->setChecked(index == 1);
+	if (earnButton)
+		earnButton->setChecked(index == 2);
 }
-void YondCastDock::showProducePage(){setPage(0);} void YondCastDock::showEngagePage(){setPage(1);} void YondCastDock::showEarnPage(){setPage(2);}
+
+void YondCastDock::showProducePage() { setPage(0); }
+void YondCastDock::showEngagePage() { setPage(1); }
+void YondCastDock::showEarnPage() { setPage(2); }
