@@ -10,6 +10,13 @@ OBS_MODULE_AUTHOR("Yond Cast")
 
 static YondCastDock *g_dock = nullptr;
 
+static void refresh_dock()
+{
+	if (!g_dock)
+		return;
+	QMetaObject::invokeMethod(g_dock, &YondCastDock::refreshStatus, Qt::QueuedConnection);
+}
+
 static void frontend_event(enum obs_frontend_event event, void *)
 {
 	if (!g_dock)
@@ -30,8 +37,15 @@ static void frontend_event(enum obs_frontend_event event, void *)
 		break;
 	case OBS_FRONTEND_EVENT_FINISHED_LOADING:
 	case OBS_FRONTEND_EVENT_PROFILE_CHANGED:
+	case OBS_FRONTEND_EVENT_PROFILE_RENAMED:
 	case OBS_FRONTEND_EVENT_SCENE_COLLECTION_CHANGED:
-		QMetaObject::invokeMethod(g_dock, &YondCastDock::refreshStatus, Qt::QueuedConnection);
+	case OBS_FRONTEND_EVENT_SCENE_COLLECTION_RENAMED:
+	case OBS_FRONTEND_EVENT_SCENE_CHANGED:
+	case OBS_FRONTEND_EVENT_SCENE_LIST_CHANGED:
+	case OBS_FRONTEND_EVENT_STUDIO_MODE_ENABLED:
+	case OBS_FRONTEND_EVENT_STUDIO_MODE_DISABLED:
+	case OBS_FRONTEND_EVENT_PREVIEW_SCENE_CHANGED:
+		refresh_dock();
 		break;
 	default:
 		break;
@@ -49,7 +63,7 @@ bool obs_module_load(void)
 	}
 
 	obs_frontend_add_event_callback(frontend_event, nullptr);
-	blog(LOG_INFO, "[Yond Cast] Native dock loaded");
+	blog(LOG_INFO, "[Yond Cast] Native control center loaded");
 	return true;
 }
 
@@ -58,10 +72,10 @@ void obs_module_unload(void)
 	obs_frontend_remove_event_callback(frontend_event, nullptr);
 	obs_frontend_remove_dock("yondcast-control");
 	g_dock = nullptr;
-	blog(LOG_INFO, "[Yond Cast] Native dock unloaded");
+	blog(LOG_INFO, "[Yond Cast] Native control center unloaded");
 }
 
 MODULE_EXPORT const char *obs_module_description(void)
 {
-	return "Yond Cast product layer for OBS Studio";
+	return "Yond Cast product layer and native control center for OBS Studio";
 }
